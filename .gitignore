@@ -1,4 +1,4 @@
-./test
-./rsconnect
+test/
+rsconnect/
 
 .DS_Store
