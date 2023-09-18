@@ -1,0 +1,443 @@
+---
+title: "Analysis Simulated Data"
+author: "David"
+date: "2023-07-05"
+output: 
+  html_document:
+    toc: yes
+    toc_depth: 4
+    toc_float: yes    
+editor options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library(ggplot2)
+library('dplyr')
+```
+
+## 1. Parallel Design
+
+To perform the following analysis I am going to set some parameters of the populations as follows:
+
+```{r}
+
+source("C:/Users/dv661427/OneDrive - Dalhousie University/Simulation Code/sim_functions.R")
+
+design='parallel'
+N=40
+pMean=8.1
+psd=1.4
+iter=1000
+tx_effect=-1
+
+```
+
+### 1.1. Comparing Distributions of LCI and LCI_2 (the follow-up measurement) from both methods.
+
+The Gamma procedure restricts the data in three ways, that Cole's Simulation didn't. The first one is related to the balanced of the sample, Gamma keeps the proportion of treated patients between 40% and 60%. The second one is related to the 'feasible' values of LCI, when the follow up value of the LCI results in a value less than 5, this value is adjusted with a uniform random value between 5 and 6. Finally, Gamma method doesn't allow LCI values greater than 20. 
+
+It is important to note, that both methods don't permit LCI values less than 5 as an initial LCI measurement. Also, both methods consider that $\beta_1$ is distributed as $N(\beta_1,sd_{\beta_1})$  
+
+```{r, echo=FALSE}
+
+# par(mfrow=c(2,1),pin=c(3,1.9),mai=c(0.4, 0.4, 0.4, 0.3))
+buckets = seq(5,20,by=1)
+
+for (i in 1:iter) {
+
+  dt=lci_simulation(N=N, pop_mean=pMean, pop_sd=psd, b1=tx_effect, b1_sd=1,design_name=design)
+  h=hist(dt$lci_orig,breaks=buckets,plot=FALSE)
+  
+  h_tx = hist(dt[dt$tx==1,'lci_2'],breaks=buckets,plot=FALSE)
+  h_ntx = hist(dt[dt$tx==0,'lci_2'],breaks=buckets,plot=FALSE)
+  
+  if (i==1) {  
+    plot(h$mids,h$density,type = 'l',col=c('gray'),ylim=c(0,0.8),xlim=c(5,20),xlab="Midpoints of intervals/buckets",ylab="prob(x)",main="Gamma's method simulations")
+    ymean=h$density
+    
+    #adding line for lci_2
+    # lines(h_tx$mids,h_tx$density,type = 'l',col=c('lightgray'))
+    ymean_tx=h_tx$density
+    ymean_ntx=h_ntx$density
+    
+  }else{
+    lines(h$mids,h$density,type = 'l',col=c('gray'))
+    ymean=rbind(ymean,h$density)
+    
+    #adding line for lci_2
+    # lines(h_tx$mids,h_tx$density,type = 'l',col=c('lightgray'))
+    ymean_tx=rbind(ymean_tx,h_tx$density)
+    ymean_ntx=rbind(ymean_ntx,h_ntx$density)
+  }
+  
+} 
+
+ymean=colMeans(ymean)
+
+lines(h$mids,ymean,type = 'o',col=c('black'))
+
+ymean_ntx=colMeans(ymean_ntx)
+
+lines(h$mids,ymean_ntx,type = 'o',col=c('blue'))
+
+ymean_tx=colMeans(ymean_tx)
+
+lines(h$mids,ymean_tx,type = 'o',col=c('red'))
+
+# Cole's simulation procedure
+
+#Since it could have even negative values I extend the limits to start from -1. Even with this extension sometimes the code crash. In that case just run it again
+buckets = seq(-1,20,by=1)
+
+for (i in 1:iter) {
+  
+  dt=lci_simulation_exact_cole(N=N, pop_mean=pMean, pop_sd=psd, b1=tx_effect, b1_sd=1,design_name=design)
+  h=hist(dt$lci_orig,breaks=buckets,plot=FALSE)
+  
+  h_tx = hist(dt[dt$tx==1,'lci_2'],breaks=buckets,plot=FALSE)
+  h_ntx = hist(dt[dt$tx==0,'lci_2'],breaks=buckets,plot=FALSE)
+  
+  if (i==1) {  
+    plot(h$mids,h$density,type = 'l',col=c('gray'),ylim=c(0,0.8),xlim=c(-1,20),xlab="Midpoints of intervals/buckets",ylab="prob(x)",main="Cole's method simulations")
+    ymean=h$density
+    
+    #adding line for lci_2
+    # lines(h_tx$mids,h_tx$density,type = 'l',col=c('lightgray'))
+    ymean_tx=h_tx$density
+    ymean_ntx=h_ntx$density
+    
+  }else{
+    lines(h$mids,h$density,type = 'l',col=c('gray'))
+    ymean=rbind(ymean,h$density)
+    
+    #adding line for lci_2
+    # lines(h_tx$mids,h_tx$density,type = 'l',col=c('lightgray'))
+    ymean_tx=rbind(ymean_tx,h_tx$density)
+    ymean_ntx=rbind(ymean_ntx,h_ntx$density)
+  }
+  
+} 
+
+ymean=colMeans(ymean)
+
+lines(h$mids,ymean,type = 'o',col=c('black'))
+
+ymean_ntx=colMeans(ymean_ntx)
+
+lines(h$mids,ymean_ntx,type = 'o',col=c('blue'))
+
+ymean_tx=colMeans(ymean_tx)
+
+lines(h$mids,ymean_tx,type = 'o',col=c('red'))
+
+```
+
+### 1.2 Variability terms
+
+Cole's method uses two term two randomize the data: `u_i` and `e_ij`. While the former accounts for variability inter-individuals, the later accounts for other sources of variability before and during the measurements. Both terms are generated using montecarlo procedure but defining the shape of the data in a deterministic way. In Gamma method `u_i` is equivalent to a truncated Gamma distribution. And 'e_ij' in Gamma, is normal distributed with zero mean and an assumed standard deviation, for this analysis I used 1.2 times the $sd_{\beta_1}$ which is more or less equal to `e_ij` standard deviation from Cole's. 
+
+```{r, echo=FALSE}
+buckets = seq(-5,5,by=1)
+
+for (i in 1:iter) {
+  
+  dt=lci_simulation_exact_cole(N=N, pop_mean=pMean, pop_sd=psd, b1=tx_effect, b1_sd=1,design_name=design)
+  h=hist(dt$u_i,breaks=buckets,plot=FALSE)
+  
+  if (i==1) {  
+    plot(h$mids,h$density,type = 'l',col=c('gray'),ylim=c(0,1),xlim=c(-5,5),xlab="Midpoints of intervals/buckets",ylab="prob(x)",main="u_i term from Cole's method")
+    ymean=h$density
+    
+    
+  }else{
+    lines(h$mids,h$density,type = 'l',col=c('gray'))
+    ymean=rbind(ymean,h$density)
+    
+  }
+  
+} 
+
+ymean=colMeans(ymean)
+
+lines(h$mids,ymean,type = 'l',col=c('black'))
+```
+
+```{r, echo=FALSE}
+
+#analizing e_ij term in Cole's Simulation
+
+buckets = seq(-10,10,by=1)
+
+for (i in 1:iter) {
+  
+  dt=lci_simulation_exact_cole(N=N, pop_mean=pMean, pop_sd=psd, b1=tx_effect, b1_sd=1,design_name=design)
+  h=hist(dt$e_ij,breaks=buckets,plot=FALSE)
+  
+  if (i==1) {  
+    plot(h$mids,h$density,type = 'l',col=c('gray'),ylim=c(0,1),xlim=c(-10,10),xlab="Midpoints of intervals/buckets",ylab="prob(x)",main="e_ij term from Cole's method")
+    ymean=h$density
+    
+    
+  }else{
+    lines(h$mids,h$density,type = 'l',col=c('gray'))
+    ymean=rbind(ymean,h$density)
+    
+  }
+  
+} 
+
+ymean=colMeans(ymean)
+
+lines(h$mids,ymean,type = 'l',col=c('black'))
+
+
+
+#analizing msmt_error term in Gamma Simulation
+
+buckets = seq(-10,10,by=1)
+
+for (i in 1:iter) {
+  
+  dt=lci_simulation(N=N, pop_mean=pMean, pop_sd=psd, b1=tx_effect, b1_sd=1,design_name=design)
+  h=hist(dt$msmt_error,breaks=buckets,plot=FALSE)
+  
+  if (i==1) {  
+    plot(h$mids,h$density,type = 'l',col=c('gray'),ylim=c(0,1),xlim=c(-10,10),xlab="Midpoints of intervals/buckets",ylab="prob(x)",main="e_ij term from Gamma's method")
+    ymean=h$density
+    
+    
+  }else{
+    lines(h$mids,h$density,type = 'l',col=c('gray'))
+    ymean=rbind(ymean,h$density)
+    
+  }
+  
+} 
+
+ymean=colMeans(ymean)
+
+lines(h$mids,ymean,type = 'l',col=c('black'))
+
+```
+
+### 1.3 Treatment sample balance
+
+As I mentioned in the 1.1 section, Cole's method doesn't restrict the proportion of treated patients. It relies in a binomial distribution with a success probability of 0.5 which it will indeed converge to a 0.5 proportion of treated patients as the number of the sample increases. However, when it simulates small samples sometimes result in a highly imbalanced sample.
+
+```{r, echo=FALSE}
+
+ptx_cole=c()
+ptx_gamma=c()
+
+for (i in 1:iter) {
+  
+  dtc=lci_simulation_exact_cole(N=N, pop_mean=pMean, pop_sd=psd, b1=tx_effect, b1_sd=1,design_name=design)
+  dtg=lci_simulation(N=N, pop_mean=pMean, pop_sd=psd, b1=tx_effect, b1_sd=1,design_name=design)
+
+  ptx_cole=append(ptx_cole,(dim(dtc[dtc['tx']==1,])[1]/N))
+  ptx_gamma=append(ptx_gamma,(dim(dtg[dtg['tx']==1,])[1]/N))
+
+} 
+
+boxplot(ptx_cole,ptx_gamma,names=c("Cole's", "Gamma's"),ylim=c(0,1.5),ylab="Proportion of treated patients")
+
+
+
+```
+
+
+## 2. Longitudinal Design
+
+To perform the following analysis I am going to set some parameters of the populations as follows:
+
+```{r}
+
+source("C:/Users/dv661427/OneDrive - Dalhousie University/Simulation Code/sim_functions.R")
+
+
+design='longitudinal'
+N=40
+pMean=8.1
+psd=1.4
+slope=0.6
+b1_sd=1
+iter=1000
+sDuration=1
+nMsrm=4
+```
+
+```{r, echo=FALSE}
+dt=lci_simulation_exact_cole(N, pop_mean=pMean, pop_sd=psd, b1=slope, b1_sd=1, design_name=design, study_duration=sDuration, msm_per_year=nMsrm)
+
+
+ggplot(dt, aes(x=time, y=lci_2, colour = factor(id))) +
+  geom_line() +
+  geom_point()+
+  theme(legend.position="none") +
+  scale_x_discrete(name =paste("Measurements in",sDuration,"year(s)"), limits=factor(seq(1,nMsrm+1,by=1)))
+
+
+```
+
+
+### 2.1. Comparing Distributions of initial LCI and the mean distribution of the follow-up measurements from both methods.
+
+```{r, echo=FALSE}
+
+# par(mfrow=c(2,1),pin=c(3,1.9),mai=c(0.4, 0.4, 0.4, 0.3))
+buckets = seq(5,20,by=1)
+
+times=as.integer(sDuration*nMsrm)+1
+
+#creating dataframe for iterations
+ydensities=data.frame(matrix(nrow = 0, ncol = 4))
+colnames(ydensities)=c('iter','time','mid','density')
+
+for (i in 1:iter) {
+
+  dt=lci_simulation(N=N, pop_mean=pMean, pop_sd=psd, b1=slope, b1_sd=1, design_name=design, study_duration=sDuration, msm_per_year=nMsrm)
+  
+  for (j in 1:times) {
+    
+    h=hist(dt[dt['time']==j,'lci_2'],breaks=buckets,plot=FALSE)
+    temp_df=data.frame(iter=rep(i,length(buckets)-1), time=rep(j,length(buckets)-1),mid=h$mids,density=h$density)
+    ydensities=rbind(ydensities,temp_df)
+  
+  }
+
+}
+
+data <- ydensities %>% 
+  filter(time==1)
+
+p=ggplot(data,aes(x=mid, y=density, group = iter))+
+  geom_line(color="grey")
+
+
+data <- ydensities %>%
+  group_by(time,mid) %>%
+  summarise(
+    meanDensity = mean(density)
+  )
+
+p = p + geom_line(data=data,aes(x=mid, y=meanDensity, group=time, colour=factor(time))) +
+          ggtitle("Gamma's Longitudinal Simulation")
+p
+
+# Cole's simulation procedure
+
+#Since it could have even negative values I extend the limits to start from -1. Even with this extension sometimes the code crash. In that case just run it again
+buckets = seq(-1,20,by=1)
+
+times=as.integer(sDuration*nMsrm)+1
+
+#creating dataframe for iterations
+ydensities=data.frame(matrix(nrow = 0, ncol = 4))
+colnames(ydensities)=c('iter','time','mid','density')
+
+for (i in 1:iter) {
+
+  dt=lci_simulation_exact_cole(N=N, pop_mean=pMean, pop_sd=psd, b1=slope, b1_sd=1, design_name=design, study_duration=sDuration, msm_per_year=nMsrm)
+  
+  for (j in 1:times) {
+    
+    h=hist(dt[dt['time']==j,'lci_2'],breaks=buckets,plot=FALSE)
+    temp_df=data.frame(iter=rep(i,length(buckets)-1), time=rep(j,length(buckets)-1),mid=h$mids,density=h$density)
+    ydensities=rbind(ydensities,temp_df)
+  
+  }
+
+
+}
+
+data <- ydensities %>% 
+  filter(time==1)
+
+p=ggplot(data,aes(x=mid, y=density, group = iter))+
+  geom_line(color="grey")
+
+
+data <- ydensities %>%
+  group_by(time,mid) %>%
+  summarise(
+    meanDensity = mean(density)
+  )
+
+p = p + geom_line(data=data,aes(x=mid, y=meanDensity, group=time, colour=factor(time))) +
+          ggtitle("Cole's Longitudinal Simulation")
+p 
+
+```
+
+
+### 2.2 Variability terms
+
+Same way I did before, I am going to compare the random variability terms `e_ij`, but for longitudinal simulation it causes independent variability in each measurement (for each individual).
+
+```{r, echo=FALSE}
+
+
+#analizing e_ij term in Cole's Simulation
+
+buckets = seq(-10,10,by=1)
+
+for (i in 1:iter) {
+  
+  dt=lci_simulation_exact_cole(N=N, pop_mean=pMean, pop_sd=psd, b1=slope, b1_sd=1, design_name=design, study_duration=sDuration, msm_per_year=nMsrm)
+  
+  h=hist(dt$e_ij,breaks=buckets,plot=FALSE)
+  
+  if (i==1) {  
+    plot(h$mids,h$density,type = 'l',col=c('gray'),ylim=c(0,1),xlim=c(-10,10),xlab="Midpoints of intervals/buckets",ylab="prob(x)",main="e_ij term from Cole's method (Longitudinal)")
+    ymean=h$density
+    
+    
+  }else{
+    lines(h$mids,h$density,type = 'l',col=c('gray'))
+    ymean=rbind(ymean,h$density)
+    
+  }
+  
+} 
+
+ymean=colMeans(ymean)
+
+lines(h$mids,ymean,type = 'l',col=c('black'))
+
+
+#analizing msmt_error term in Gamma Simulation
+
+buckets = seq(-10,10,by=1)
+
+for (i in 1:iter) {
+  
+  dt=lci_simulation(N=N, pop_mean=pMean, pop_sd=psd, b1=slope, b1_sd=1, design_name=design, study_duration=sDuration, msm_per_year=nMsrm)
+  h=hist(dt$msmt_error,breaks=buckets,plot=FALSE)
+  
+  if (i==1) {  
+    plot(h$mids,h$density,type = 'l',col=c('gray'),ylim=c(0,1),xlim=c(-10,10),xlab="Midpoints of intervals/buckets",ylab="prob(x)",main="e_ij term from Gamma's method (Longitudinal)")
+    ymean=h$density
+    
+    
+  }else{
+    lines(h$mids,h$density,type = 'l',col=c('gray'))
+    ymean=rbind(ymean,h$density)
+    
+  }
+  
+} 
+
+ymean=colMeans(ymean)
+
+lines(h$mids,ymean,type = 'l',col=c('black'))
+
+
+```
+
+
+### 2.3 Treatment sample balance
+
+For this study **there are no treated and non-treated individuals**, therefore there isn't an imbalanced scenario.
+
